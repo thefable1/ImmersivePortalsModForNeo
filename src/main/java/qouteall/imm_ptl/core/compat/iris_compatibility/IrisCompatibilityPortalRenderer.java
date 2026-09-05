@@ -241,6 +241,15 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
         // so make sure this one is ready before we copy into it
         deferredBuffer.prepare();
 
+        // the main render target has a combined depth-stencil attachment (vanilla
+        // creates it that way), but a freshly-created SecondaryFrameBuffer defaults to
+        // depth-only. glCopyImageSubData below requires matching internal formats, so
+        // without this the copy is silently rejected (GL_INVALID_OPERATION) every frame,
+        // the deferred buffer's depth never gets updated past its initial clear, and
+        // portals end up rendered as if nothing ever occludes them -- e.g. bleeding
+        // through walls whenever a shaderpack is active.
+        IPPortingLibCompat.setIsStencilEnabled(deferredBuffer.fb, true);
+
         // save the main framebuffer (this recursion depth's freshly rendered world) to
         // its deferred buffer
         IPIrisHelper.newCopyDepthStencil(
