@@ -183,7 +183,7 @@ dependencies {
     // as a separate mod.
     compileOnly files(extractSodiumApiJar)
 
-    implementation "maven.modrinth:iris:1.8.1+1.21.1-neoforge"
+    implementation "maven.modrinth:iris:1.8.14-beta.1+1.21.1-neoforge"
 
     implementation "maven.modrinth:cloth-config:15.0.140+neoforge"
     implementation "maven.modrinth:pehkui:3.8.3+1.21-neoforge"
