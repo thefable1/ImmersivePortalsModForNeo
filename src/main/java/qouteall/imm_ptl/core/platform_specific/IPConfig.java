@@ -52,7 +52,10 @@ public class IPConfig implements ConfigData {
     @ConfigEntry.Category("client")
     @ConfigEntry.Gui.Tooltip
     public boolean compatibilityRenderMode = false;
-    
+    @ConfigEntry.Category("client")
+    @ConfigEntry.Gui.Tooltip
+    public boolean PortalRecursionInCompatibilityMode = false;
+
     // client invisible configs
     
     @ConfigEntry.Gui.Excluded
@@ -81,7 +84,11 @@ public class IPConfig implements ConfigData {
     public boolean saveMemoryInBufferPack = false;
     @ConfigEntry.Gui.Excluded
     public boolean initialScreenShown = false;
-    
+    @ConfigEntry.Gui.Excluded
+    public boolean forceBlockingSortCatchUpEnabled = false;
+    @ConfigEntry.Gui.Excluded
+    public int forceBlockingSortCatchUpRadius = 32;
+
     // common visible configs
     
     @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
@@ -102,6 +109,9 @@ public class IPConfig implements ConfigData {
     @ConfigEntry.Gui.Tooltip
     public boolean enableServerPerformanceAdjustment = true;
     public boolean enableDatapackPortalGen = true;
+    @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
+    public IPGlobal.IndirectLoadingRadiusCapMode indirectLoadingRadiusCapMode =
+        IPGlobal.IndirectLoadingRadiusCapMode.RenderDistance;
     @ConfigEntry.BoundedDiscrete(min = 1, max = 32)
     @ConfigEntry.Gui.Tooltip
     public int indirectLoadingRadiusCap = 8;
@@ -164,8 +174,12 @@ public class IPConfig implements ConfigData {
         if (endPortalMode == null) {
             endPortalMode = IPGlobal.EndPortalMode.normal;
         }
-        
+        if (indirectLoadingRadiusCapMode == null) {
+            indirectLoadingRadiusCapMode = IPGlobal.IndirectLoadingRadiusCapMode.RenderDistance;
+        }
+
         IPGlobal.renderMode = compatibilityRenderMode ? IPGlobal.RenderMode.compatibility : IPGlobal.RenderMode.normal;
+        IPGlobal.PortalRecursionInCompatibilityMode = PortalRecursionInCompatibilityMode;
         IPGlobal.enableWarning = enableWarning;
         IPGlobal.enableMirrorCreation = enableMirrorCreation;
         IPGlobal.doCheckGlError = doCheckGlError;
@@ -180,6 +194,7 @@ public class IPConfig implements ConfigData {
         IPGlobal.looseMovementCheck = looseMovementCheck;
         IPGlobal.pureMirror = pureMirror;
         IPGlobal.indirectLoadingRadiusCap = indirectLoadingRadiusCap;
+        IPGlobal.indirectLoadingRadiusCapMode = indirectLoadingRadiusCapMode;
         IPGlobal.netherPortalMode = netherPortalMode;
         IPGlobal.endPortalMode = endPortalMode;
         IPGlobal.reducedPortalRendering = reducedPortalRendering;
@@ -192,6 +207,8 @@ public class IPConfig implements ConfigData {
         IPGlobal.enableDatapackPortalGen = enableDatapackPortalGen;
         IPGlobal.enableCrossPortalView = enableCrossPortalView;
         IPGlobal.enableClippingMechanism = enableClippingMechanism;
+        IPGlobal.forceBlockingSortCatchUpEnabled = forceBlockingSortCatchUpEnabled;
+        IPGlobal.forceBlockingSortCatchUpRadius = forceBlockingSortCatchUpRadius < 0 ? -1.0 : forceBlockingSortCatchUpRadius;
         IPGlobal.lightVanillaNetherPortalWhenCrouching = lightVanillaNetherPortalWhenCrouching;
         IPGlobal.enableNetherPortalEffect = enableNetherPortalEffect;
         IPGlobal.enableClientPerformanceAdjustment = enableClientPerformanceAdjustment;

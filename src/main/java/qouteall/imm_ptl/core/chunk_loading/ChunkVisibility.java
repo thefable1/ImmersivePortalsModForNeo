@@ -50,7 +50,7 @@ public class ChunkVisibility {
         PerformanceLevel performanceLevel =
             ImmPtlChunkTracking.getPlayerInfo(player).performanceLevel;
         int cap1 = PerformanceLevel.getIndirectLoadingRadiusCap(performanceLevel);
-        int cap2 = IPGlobal.indirectLoadingRadiusCap;
+        int cap2 = IPGlobal.getEffectiveIndirectLoadingRadiusCap();
         int cap3 = PerformanceLevel.getIndirectLoadingRadiusCap(ServerPerformanceMonitor.getLevel());
         
         int cap = Math.min(cap1, cap2);
@@ -101,7 +101,7 @@ public class ChunkVisibility {
     ) {
         if (portal.getIsGlobal()) {
             int renderDistance = Math.min(
-                IPGlobal.indirectLoadingRadiusCap * 2,
+                IPGlobal.getEffectiveIndirectLoadingRadiusCap() * 2,
                 //load a little more to make dimension stack more complete
                 Math.max(
                     2,
@@ -151,7 +151,7 @@ public class ChunkVisibility {
         
         if (portal.getIsGlobal()) {
             int renderDistance = Math.min(
-                IPGlobal.indirectLoadingRadiusCap,
+                IPGlobal.getEffectiveIndirectLoadingRadiusCap(),
                 loadDistance / 3
             );
             return new ChunkLoader(
