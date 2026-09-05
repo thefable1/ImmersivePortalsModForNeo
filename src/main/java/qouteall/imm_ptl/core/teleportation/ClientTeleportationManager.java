@@ -11,6 +11,7 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -382,7 +383,9 @@ public class ClientTeleportationManager {
         //because the teleportation may happen before rendering
         //but after pre render info being updated
         RenderStates.updatePreRenderInfo(partialTick);
-        
+
+        FogRendererContext.snapBiomeTransition();
+
         if (teleportation.isDynamic()) {
             LOGGER.info(
                 """
@@ -443,8 +446,9 @@ public class ClientTeleportationManager {
         McHelper.adjustVehicle(player);
         
         lastPlayerEyePos = null;
-        
+
         RenderStates.updatePreRenderInfo(RenderStates.getPartialTick());
+        FogRendererContext.snapBiomeTransition();
         MyGameRenderer.vanillaTerrainSetupOverride = 1;
     }
     
@@ -693,25 +697,39 @@ public class ClientTeleportationManager {
         public static void updateEntityPos(
             ResourceKey<Level> dim,
             int entityId,
-            Vec3 pos
+            Vec3 pos,
+            float yaw,
+            float pitch,
+            float headYaw
         ) {
             ClientLevel world = ClientWorldLoader.getWorld(dim);
-            
+
             Entity entity = world.getEntity(entityId);
-            
+
             if (entity == null) {
                 Helper.err("cannot find entity to update position");
                 return;
             }
-            
+
             // both of them are important for Minecart
             entity.setPos(pos);
+            // snap last tick pos so the entity doesn't slide from the old pos
+            McHelper.setPosAndLastTickPos(entity, pos, pos);
             entity.lerpTo(
                 pos.x, pos.y, pos.z,
-                entity.getYRot(), entity.getXRot(),
+                yaw, pitch,
                 0
             );
             entity.setPos(pos);
+            entity.setYRot(yaw);
+            entity.setXRot(pitch);
+            entity.setYHeadRot(headYaw);
+            entity.yRotO = yaw;
+            entity.xRotO = pitch;
+            if (entity instanceof LivingEntity livingEntity) {
+                livingEntity.yBodyRot = yaw;
+                livingEntity.yBodyRotO = yaw;
+            }
         }
     }
 }
