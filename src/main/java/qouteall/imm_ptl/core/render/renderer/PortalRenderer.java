@@ -217,21 +217,29 @@ public abstract class PortalRenderer {
                 .setOverwriteCameraTransformation(false)
                 .setDescription(portal.getDiscriminator())
                 .setRenderDistance(renderDistance)
-                .setDoRenderHand(false)
+                .setDoRenderHand(shouldRenderHand(portal))
                 .setEnableViewBobbing(true)
                 .setDoRenderSky(!portal.isFuseView())
                 .build()
         );
-        
+
         PortalRendering.onEndPortalWorldRendering();
-        
+
         GlStateManager._enableDepthTest();
-        
+
         MyRenderHelper.restoreViewPort();
-        
-        
+
+
     }
-    
+
+    public boolean shouldRenderHand(Portal portal) {
+        return client.options.getCameraType().isFirstPerson()
+            && IrisInterface.invoker.isShaders()
+            && portal.getDistanceToNearestPointInPortal(
+                TransformationManager.getIsometricAdjustedCameraPos()
+            ) <= 0.35;
+    }
+
     private static int getPortalRenderDistance(Portal portal) {
         int mcRenderDistance = client.options.getEffectiveRenderDistance();
         
