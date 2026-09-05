@@ -619,6 +619,11 @@ public class ClientDebugCommand {
         );
         registerSwitchCommand(
             builder,
+            "portal_recursion_in_compatibility",
+            cond -> IPGlobal.PortalRecursionInCompatibilityMode = cond
+        );
+        registerSwitchCommand(
+            builder,
             "view_bob_reduce",
             cond -> IPGlobal.viewBobbingReduce = cond
         );
@@ -636,6 +641,11 @@ public class ClientDebugCommand {
             builder,
             "experimental_iris_portal_renderer",
             cond -> IPCGlobal.experimentalIrisPortalRenderer = cond
+        );
+        registerSwitchCommand(
+            builder,
+            "iris_uniform_updates",
+            cond -> IPCGlobal.irisUniformUpdate = cond
         );
         registerSwitchCommand(
             builder,
@@ -681,6 +691,27 @@ public class ClientDebugCommand {
             builder,
             "box_portal_special_iteration",
             cond -> IPGlobal.boxPortalSpecialIteration = cond
+        );
+        registerSwitchCommand(
+            builder,
+            "force_blocking_sort_catch_up",
+            cond -> IPGlobal.forceBlockingSortCatchUpEnabled = cond
+        );
+        builder.then(Commands
+            .literal("force_blocking_sort_catch_up_set_radius")
+            .then(Commands
+                .argument("blocks", DoubleArgumentType.doubleArg(-1))
+                .executes(context -> {
+                    double blocks = DoubleArgumentType.getDouble(context, "blocks");
+                    IPGlobal.forceBlockingSortCatchUpRadius = blocks;
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        blocks < 0
+                            ? "force_blocking_sort_catch_up radius cutoff disabled (unbounded)"
+                            : "force_blocking_sort_catch_up radius set to " + blocks + " blocks"
+                    ), false);
+                    return 0;
+                })
+            )
         );
 
         builder.then(Commands
