@@ -210,7 +210,9 @@ public class MyGameRenderer {
             }
         }
         
-        Object newSodiumContext = SodiumInterface.invoker.createNewContext(renderDistance);
+        Object newSodiumContext = SodiumInterface.invoker.createNewContext(
+            renderDistance, new org.joml.Vector3d(thisTickCameraPos.x(), thisTickCameraPos.y(), thisTickCameraPos.z())
+        );
         SodiumInterface.invoker.switchContextWithCurrentWorldRenderer(newSodiumContext);
         
         ((IEWorldRenderer) worldRenderer).portal_setTransparencyShader(null);
@@ -235,7 +237,16 @@ public class MyGameRenderer {
         });
         
         SodiumInterface.invoker.switchContextWithCurrentWorldRenderer(newSodiumContext);
-        
+
+        if (newWorld.dimension() == oldWorld.dimension()) {
+            if (PortalRendering.getPortalLayer() == 1) {
+                // After the swap above, newSodiumContext's render list now holds the
+                // portal's own (just-finished) render list, which is the "other view"
+                // relative to the outer camera we've just returned to.
+                SodiumInterface.invoker.forceBlockingSortCatchUp();
+            }
+        }
+
         //recover
         
         ((IEMinecraftClient) client).ip_setWorldRenderer(oldWorldRenderer);

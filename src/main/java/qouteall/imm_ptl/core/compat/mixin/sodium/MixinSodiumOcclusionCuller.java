@@ -1,6 +1,7 @@
 package qouteall.imm_ptl.core.compat.mixin.sodium;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
+import net.caffeinemc.mods.sodium.client.render.chunk.lists.RenderSectionVisitor;
 import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.OcclusionCuller;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.minecraft.core.SectionPos;
@@ -22,18 +23,18 @@ import qouteall.imm_ptl.core.render.context_management.PortalRendering;
 public abstract class MixinSodiumOcclusionCuller {
     @Shadow(remap = false)
     protected abstract RenderSection getRenderSection(int x, int y, int z);
-    
+
     @Shadow(remap = false)
     public static boolean isWithinFrustum(Viewport viewport, RenderSection section) {
         throw new RuntimeException();
     }
-    
+
     @Unique
     private @Nullable SectionPos ip_modifiedStartPoint;
-    
+
     @Unique
     private static boolean ip_tolerantInitialFrustumTestFail;
-    
+
     // update the iteration start point modification value
     @SuppressWarnings("ConstantValue")
     @ModifyVariable(
@@ -41,23 +42,23 @@ public abstract class MixinSodiumOcclusionCuller {
     )
     boolean modifyUseOcclusionCulling(
         boolean originalValue,
-        OcclusionCuller.Visitor visitor, Viewport viewport, float searchDistance, boolean useOcclusionCulling, int frame
+        RenderSectionVisitor visitor, Viewport viewport, float searchDistance, boolean useOcclusionCulling, int frame
     ) {
         boolean doUseOcclusionCulling = PortalRendering.shouldEnableSodiumCaveCulling();
-        
+
         ip_modifiedStartPoint = null;
         ip_tolerantInitialFrustumTestFail = false;
-        
+
         if (PortalRendering.isRendering()) {
             Portal portal = PortalRendering.getRenderingPortal();
-            
+
             Vec3 cameraPos = CHelper.getCurrentCameraPos();
             ip_modifiedStartPoint = portal.getPortalShape().getModifiedVisibleSectionIterationOrigin(
                 portal, cameraPos
             );
             if (ip_modifiedStartPoint != null) {
                 doUseOcclusionCulling = false;
-                
+
                 RenderSection renderSection = getRenderSection(
                     ip_modifiedStartPoint.x(), ip_modifiedStartPoint.y(), ip_modifiedStartPoint.z()
                 );
@@ -66,10 +67,10 @@ public abstract class MixinSodiumOcclusionCuller {
                 }
             }
         }
-        
+
         return doUseOcclusionCulling;
     }
-    
+
     // apply start point modification
     @Redirect(
         method = "init",
@@ -84,10 +85,10 @@ public abstract class MixinSodiumOcclusionCuller {
         if (ip_modifiedStartPoint != null) {
             return ip_modifiedStartPoint;
         }
-        
+
         return instance.getChunkCoord();
     }
-    
+
     // apply start point modification
     @Redirect(
         method = "initWithinWorld",
@@ -101,10 +102,10 @@ public abstract class MixinSodiumOcclusionCuller {
         if (ip_modifiedStartPoint != null) {
             return ip_modifiedStartPoint;
         }
-        
+
         return instance.getChunkCoord();
     }
-    
+
     // when iteration start point become a position that's outside of frustum
     // make it tolerant early frustum test failures to avoid wrongly halting iteration
     @Inject(

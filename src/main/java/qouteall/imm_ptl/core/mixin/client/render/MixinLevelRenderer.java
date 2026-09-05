@@ -159,7 +159,11 @@ public abstract class MixinLevelRenderer implements IEWorldRenderer {
         DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f modelView, Matrix4f matrix4f2, CallbackInfo ci
     ) {
         IPCGlobal.renderer.onBeforeTranslucentRendering(modelView);
-        
+
+        if (WorldRenderInfo.isRendering()) {
+            SodiumInterface.invoker.forceBlockingSortCatchUp();
+        }
+
         MyGameRenderer.updateFogColor();
         MyGameRenderer.resetFogState();
         

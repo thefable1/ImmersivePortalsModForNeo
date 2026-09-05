@@ -128,6 +128,46 @@ mixin {
     configs.add("imm_ptl_fabric.mixins.json")
 }
 
+configurations {
+    // Sodium's published NeoForge artifact is just a thin service-locator jar;
+    // the actual game code is a nested jar-in-jar that NeoForge's mod loader
+    // extracts at runtime (see extractSodiumApiJar below). This configuration
+    // resolves that outer wrapper so we can pull the real jar out of it for
+    // compiling against.
+    sodiumWrapper
+}
+
+dependencies {
+    sodiumWrapper "maven.modrinth:sodium:mc1.21.1-0.8.12-neoforge"
+}
+
+def sodiumApiJar = layout.buildDirectory.file("sodiumApi/sodium-neoforge-mod.jar")
+
+def extractSodiumApiJar = tasks.register("extractSodiumApiJar") {
+    def wrapperJar = configurations.sodiumWrapper
+    inputs.files(wrapperJar)
+    outputs.file(sodiumApiJar)
+    doLast {
+        def outFile = sodiumApiJar.get().asFile
+        outFile.parentFile.mkdirs()
+        def wrapper = new java.util.zip.ZipFile(wrapperJar.singleFile)
+        try {
+            def entry = wrapper.entries().toList().find {
+                it.name.startsWith("META-INF/jarjar/") &&
+                    it.name.contains("sodium") && it.name.endsWith(".jar")
+            }
+            if (entry == null) {
+                throw new GradleException("Could not find nested sodium mod jar inside ${wrapperJar.singleFile}")
+            }
+            wrapper.getInputStream(entry).withStream { input ->
+                outFile.withOutputStream { output -> output << input }
+            }
+        } finally {
+            wrapper.close()
+        }
+    }
+}
+
 dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
     // NeoForge 21.1.152 jarjars mixinextras-neoforge 0.5.0 at runtime already,
@@ -137,7 +177,12 @@ dependencies {
     /*implementation "maven.modrinth:embeddium:Na1PoLYF"
     compileOnly "maven.modrinth:oculus:1.20.1-1.6.15a"*/
 
-    implementation "maven.modrinth:sodium:mc1.21.1-0.6.13-neoforge"
+    implementation "maven.modrinth:sodium:mc1.21.1-0.8.12-neoforge"
+    // The real Sodium classes, extracted from the jar-in-jar for compiling against
+    // (see extractSodiumApiJar above); not bundled, since players get Sodium itself
+    // as a separate mod.
+    compileOnly files(extractSodiumApiJar)
+
     implementation "maven.modrinth:iris:1.8.1+1.21.1-neoforge"
 
     implementation "maven.modrinth:cloth-config:15.0.140+neoforge"

@@ -16,6 +16,8 @@
     "iris.MixinIrisSodiumShader",
     "iris.MixinIrisTransformPatcher",
     "sodium.IESodiumWorldRenderer",
+    "sodium.MixinSodiumChunkJobTyped",
+    "sodium.MixinSodiumCloudRenderer",
     "sodium.MixinSodiumDefaultShaderInterface",
     "sodium.MixinSodiumFlawlessFrames",
     "sodium.MixinSodiumOcclusionCuller",
