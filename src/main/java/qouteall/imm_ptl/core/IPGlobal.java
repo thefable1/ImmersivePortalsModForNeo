@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import me.shedaniel.autoconfig.ConfigHolder;
 import net.neoforged.bus.api.Event;
 import qouteall.imm_ptl.core.platform_specific.IPConfig;
+import qouteall.q_misc_util.MiscGlobals;
 import qouteall.q_misc_util.MiscHelper;
 import qouteall.q_misc_util.my_util.MyTaskList;
 
@@ -33,11 +34,22 @@ public class IPGlobal {
     public static int maxPortalLayer = 5;
     
     public static int indirectLoadingRadiusCap = 8;
-    
+    public static IndirectLoadingRadiusCapMode indirectLoadingRadiusCapMode =
+        IndirectLoadingRadiusCapMode.RenderDistance;
+
+    public static int getEffectiveIndirectLoadingRadiusCap() {
+        if (indirectLoadingRadiusCapMode == IndirectLoadingRadiusCapMode.RenderDistance) {
+            return McHelper.getLoadDistanceOnServer(MiscGlobals.refMinecraftServer.get());
+        }
+        return indirectLoadingRadiusCap;
+    }
+
     public static boolean lagAttackProof = true;
-    
+
     public static RenderMode renderMode = RenderMode.normal;
-    
+
+    public static boolean PortalRecursionInCompatibilityMode = false;
+
     public static boolean doCheckGlError = true;
     
     public static boolean renderYourselfInPortal = true;
@@ -108,7 +120,10 @@ public class IPGlobal {
     public static boolean allowClientEntityPosInterpolation = true;
     
     public static boolean alwaysOverrideTerrainSetup = false;
-    
+
+    public static boolean forceBlockingSortCatchUpEnabled = false;
+    public static double forceBlockingSortCatchUpRadius = 32.0;
+
     public static boolean viewBobbingReduce = true;
     
     public static boolean enableClientPerformanceAdjustment = true;
@@ -141,7 +156,12 @@ public class IPGlobal {
         debug,
         none
     }
-    
+
+    public static enum IndirectLoadingRadiusCapMode {
+        RenderDistance,
+        Manual;
+    }
+
     // this should not be in core but the config is in core
     public static enum NetherPortalMode {
         normal,

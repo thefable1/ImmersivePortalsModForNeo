@@ -13,7 +13,9 @@ import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import qouteall.imm_ptl.core.chunk_loading.ImmPtlChunkTracking;
 import qouteall.imm_ptl.core.ducks.IEChunkMap;
 import qouteall.imm_ptl.core.ducks.IEEntityTrackerEntry;
@@ -92,18 +94,18 @@ public abstract class MixinTrackedEntity implements IETrackedEntity {
      *   When the player moves, the entities in curr dim except that player updates to that player,
      *   and that player updates to all player in that dimension
      */
-    @Overwrite
-    public void updatePlayer(ServerPlayer player) {
-        // nothing
+    @Inject(method = "updatePlayer", at = @At("HEAD"), cancellable = true)
+    private void iPortals$cancelUpdatePlayer(ServerPlayer player, CallbackInfo ci) {
+        ci.cancel();
     }
-    
+
     /**
      * @author qouteall
      * @reason managed by ImmPtl
      */
-    @Overwrite
-    public void updatePlayers(List<ServerPlayer> list) {
-        // nothing
+    @Inject(method = "updatePlayers", at = @At("HEAD"), cancellable = true)
+    private void iPortals$cancelUpdatePlayers(List<ServerPlayer> list, CallbackInfo ci) {
+        ci.cancel();
     }
     
     @Override

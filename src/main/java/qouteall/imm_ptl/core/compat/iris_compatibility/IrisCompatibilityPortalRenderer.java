@@ -7,6 +7,7 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import qouteall.imm_ptl.core.CHelper;
+import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.compat.IPPortingLibCompat;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.PortalRenderInfo;
@@ -28,11 +29,22 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     public static final IrisCompatibilityPortalRenderer debugModeInstance =
         new IrisCompatibilityPortalRenderer(true);
     
-    private SecondaryFrameBuffer deferredBuffer = new SecondaryFrameBuffer();
-    
+    // one buffer per possible recursion depth when Portal Recursion in Compatibility mode rendering is
+    // enabled (index == PortalRendering.getPortalLayer()). collapses down to a single
+    // buffer (index 0 only) when the "PortalRecursionInCompatibilityMode" setting is off,
+    // which is the original single-layer behavior.
+    private SecondaryFrameBuffer[] deferredBuffers = new SecondaryFrameBuffer[]{
+        new SecondaryFrameBuffer()
+    };
+
     // TODO figure out why this field existed in old versions
-    private Matrix4f passingModelView = new Matrix4f();
-    
+    // per-layer version of the above, indexed the same way
+    private Matrix4f[] passingModelViews = new Matrix4f[]{new Matrix4f()};
+
+    // one-shot guard: only warn once if the depth/stencil copy in onBeforeHandRendering
+    // ever fails again (e.g. a future Iris version/shaderpack picks a different format)
+    private boolean loggedDepthCopyError = false;
+
     public boolean isDebugMode;
     
     public IrisCompatibilityPortalRenderer(boolean isDebugMode) {
@@ -48,12 +60,17 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     
     @Override
     public void onBeforeTranslucentRendering(Matrix4f modelView) {
-        if (PortalRendering.isRendering()) {
+        int portalLayer = PortalRendering.getPortalLayer();
+
+        if (portalLayer > 0 && !IPGlobal.PortalRecursionInCompatibilityMode) {
+            // this renderer only supports one-layer portal unless Portal Recursion in Compatibility mode is enabled
             return;
         }
-        
-        passingModelView = modelView;
-        
+
+        if (portalLayer < passingModelViews.length) {
+            passingModelViews[portalLayer] = modelView;
+        }
+
         GL11.glDisable(GL_STENCIL_TEST);
     }
     
@@ -69,39 +86,77 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     
     @Override
     public void prepareRendering() {
+        // when portal-in-portal rendering is on, keep one buffer per possible
+        // recursion depth. when it's off, collapse back down to a single buffer
+        // (the original behavior).
+        int requiredBufferCount = IPGlobal.PortalRecursionInCompatibilityMode ?
+            (PortalRendering.getMaxPortalLayer() + 1) : 1;
+
+        if (deferredBuffers.length != requiredBufferCount) {
+            for (SecondaryFrameBuffer fb : deferredBuffers) {
+                if (fb.fb != null) {
+                    fb.fb.destroyBuffers();
+                }
+            }
+
+            deferredBuffers = new SecondaryFrameBuffer[requiredBufferCount];
+            for (int i = 0; i < requiredBufferCount; i++) {
+                deferredBuffers[i] = new SecondaryFrameBuffer();
+            }
+
+            passingModelViews = new Matrix4f[requiredBufferCount];
+            for (int i = 0; i < requiredBufferCount; i++) {
+                passingModelViews[i] = new Matrix4f();
+            }
+        }
+
+        SecondaryFrameBuffer deferredBuffer = deferredBuffers[0];
+
         deferredBuffer.prepare();
-        
+
         deferredBuffer.fb.setClearColor(1, 0, 0, 0);
         deferredBuffer.fb.clear(Minecraft.ON_OSX);
-        
+
         IPPortingLibCompat.setIsStencilEnabled(
             client.getMainRenderTarget(), false
         );
-        
+
         // Iris now use vanilla framebuffer's depth
         client.getMainRenderTarget().bindWrite(false);
     }
-    
+
     protected void doRenderPortal(Portal portal, Matrix4f modelView) {
-        if (PortalRendering.isRendering()) {
-            // this renderer only supports one-layer portal
-            return;
+        int portalLayer = PortalRendering.getPortalLayer();
+
+        if (portalLayer > 0) {
+            if (!IPGlobal.PortalRecursionInCompatibilityMode) {
+                // this renderer only supports one-layer portal unless Portal Recursion in Compatibility mode is enabled
+                return;
+            }
+
+            if (portalLayer >= deferredBuffers.length) {
+                // deeper than the buffers we allocated for (should track
+                // PortalRendering.getMaxPortalLayer(), so this shouldn't normally trigger)
+                return;
+            }
         }
-        
+
         if (!testShouldRenderPortal(portal, modelView)) {
             return;
         }
-        
+
         client.getMainRenderTarget().bindWrite(true);
-        
+
         PortalRendering.pushPortalLayer(portal);
-        
+
         renderPortalContent(portal);
-        
+
         PortalRendering.popPortalLayer();
-        
+
         CHelper.enableDepthClamp();
-        
+
+        SecondaryFrameBuffer deferredBuffer = deferredBuffers[portalLayer];
+
         if (!isDebugMode) {
             // draw portal content to the deferred buffer
             deferredBuffer.fb.bindWrite(true);
@@ -131,6 +186,9 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     public void invokeWorldRendering(
         WorldRenderInfo worldRenderInfo
     ) {
+
+        IrisInterface.invoker.updatePerFrameUniforms();
+
         MyGameRenderer.renderWorldNew(
             worldRenderInfo,
             Runnable::run
@@ -146,9 +204,12 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
         
         //reset projection matrix
 //        client.gameRenderer.loadProjectionMatrix(RenderStates.basicProjectionMatrix);
-        
+
+        int portalLayer = PortalRendering.getPortalLayer();
+        SecondaryFrameBuffer deferredBuffer = deferredBuffers[portalLayer];
+
         deferredBuffer.fb.bindWrite(true);
-        
+
         return PortalRenderInfo.renderAndDecideVisibility(portal, () -> {
             
             ViewAreaRenderer.renderPortalArea(
@@ -162,34 +223,74 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     
     @Override
     public void onBeforeHandRendering(Matrix4f modelView) {
-        if (PortalRendering.isRendering()) {
-            return;
+        int portalLayer = PortalRendering.getPortalLayer();
+
+        if (portalLayer > 0) {
+            if (!IPGlobal.PortalRecursionInCompatibilityMode) {
+                // this renderer only supports one-layer portal unless Portal Recursion in Compatibility mode is enabled
+                return;
+            }
+
+            if (portalLayer >= deferredBuffers.length) {
+                // deeper than the buffers we allocated for (should track
+                // PortalRendering.getMaxPortalLayer(), so this shouldn't normally trigger)
+                return;
+            }
         }
-        
+
         CHelper.checkGlError();
-        
-        // save the main framebuffer to deferredBuffer
-        IPIrisHelper.newCopyDepthStencil(
-            client.getMainRenderTarget(),
-            deferredBuffer.fb
-        );
+
+        SecondaryFrameBuffer deferredBuffer = deferredBuffers[portalLayer];
+        // buffers for recursion depth > 0 are not sized/allocated in prepareRendering(),
+        // so make sure this one is ready before we copy into it
+        deferredBuffer.prepare();
+
+        // the main render target has a combined depth-stencil attachment (vanilla
+        // creates it that way), but a freshly-created SecondaryFrameBuffer defaults to
+        // depth-only, which makes the glCopyImageSubData-based depth copy below fail
+        // (GL_INVALID_OPERATION) whenever a shaderpack is active, leaving the deferred
+        // buffer's depth stuck at its initial clear and portals rendering as if nothing
+        // ever occludes them. The exact depth-stencil precision matters too (confirmed
+        // via GL_TEXTURE_INTERNAL_FORMAT: Iris here uses GL_DEPTH32F_STENCIL8, not the
+        // GL_DEPTH24_STENCIL8 that IPPortingLibCompat.setIsStencilEnabled() would
+        // otherwise default to) -- sync the precision flag from the real main-target
+        // format first so the two match exactly.
+        IPIrisHelper.syncSeparatedStencilFormatFromMainTarget(client.getMainRenderTarget());
+        IPPortingLibCompat.setIsStencilEnabled(deferredBuffer.fb, true);
+
+        // save the main framebuffer (this recursion depth's freshly rendered world) to
+        // its deferred buffer. Color and depth/stencil are copied separately (not in one
+        // combined blit) because a combined blit aborts entirely -- including the color
+        // portion, which otherwise copies fine -- if the depth/stencil formats mismatch.
         IPIrisHelper.copyColor(
             client.getMainRenderTarget(),
             deferredBuffer.fb
         );
-//        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, client.getMainRenderTarget().frameBufferId);
-//        GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, deferredBuffer.fb.frameBufferId);
-//        GL30.glBlitFramebuffer(
-//            0, 0, deferredBuffer.fb.width, deferredBuffer.fb.height,
-//            0, 0, deferredBuffer.fb.width, deferredBuffer.fb.height,
-//            GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT,
-//            GL_NEAREST
-//        );
-        
+
+        GL11.glGetError(); // clear any pending/unrelated error before this check
+        IPIrisHelper.newCopyDepthStencil(
+            client.getMainRenderTarget(),
+            deferredBuffer.fb
+        );
+        int depthCopyError = GL11.glGetError();
+        if (depthCopyError != GL11.GL_NO_ERROR && !loggedDepthCopyError) {
+            loggedDepthCopyError = true;
+            IPIrisHelper.logFormatDiagnostics(client.getMainRenderTarget(), deferredBuffer.fb);
+            CHelper.printChat(
+                "[ImmPtl] Portal rendering with shaders may be broken: depth/stencil copy failed with GL error " +
+                    depthCopyError + ". Please report this, including the debug line above, to the mod author."
+            );
+        }
+
         CHelper.checkGlError();
-        
-        renderPortals(passingModelView);
-        
+
+        Matrix4f effectiveModelView = portalLayer < passingModelViews.length ?
+            passingModelViews[portalLayer] : modelView;
+
+        // recursing here (via doRenderPortal -> renderPortalContent) is what lets
+        // portals seen through other portals be rendered when Portal Recursion in Compatibility mode is enabled
+        renderPortals(effectiveModelView);
+
         RenderTarget mainFrameBuffer = client.getMainRenderTarget();
         mainFrameBuffer.bindWrite(true);
         
