@@ -40,7 +40,10 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     // TODO figure out why this field existed in old versions
     // per-layer version of the above, indexed the same way
     private Matrix4f[] passingModelViews = new Matrix4f[]{new Matrix4f()};
-    
+
+    // one-shot diagnostic guard, see onBeforeHandRendering
+    private boolean loggedBlitError = false;
+
     public boolean isDebugMode;
     
     public IrisCompatibilityPortalRenderer(boolean isDebugMode) {
@@ -243,32 +246,33 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
 
         // the main render target has a combined depth-stencil attachment (vanilla
         // creates it that way), but a freshly-created SecondaryFrameBuffer defaults to
-        // depth-only. glCopyImageSubData below requires matching internal formats, so
-        // without this the copy is silently rejected (GL_INVALID_OPERATION) every frame,
-        // the deferred buffer's depth never gets updated past its initial clear, and
-        // portals end up rendered as if nothing ever occludes them -- e.g. bleeding
-        // through walls whenever a shaderpack is active.
+        // depth-only, which used to make the old glCopyImageSubData-based copy below
+        // fail (GL_INVALID_OPERATION) whenever a shaderpack was active, leaving the
+        // deferred buffer's depth stuck at its initial clear and portals rendering as
+        // if nothing ever occludes them. Keeping this so the formats stay aligned even
+        // though the blit below tolerates format differences better than a raw copy.
         IPPortingLibCompat.setIsStencilEnabled(deferredBuffer.fb, true);
 
         // save the main framebuffer (this recursion depth's freshly rendered world) to
-        // its deferred buffer
-        IPIrisHelper.newCopyDepthStencil(
+        // its deferred buffer. Uses a blit rather than IPIrisHelper.newCopyDepthStencil/
+        // copyColor (glCopyImageSubData) because that raw texture-to-texture copy
+        // requires identical internal formats between source and destination, which
+        // Iris can violate when a shaderpack is active.
+        GL11.glGetError(); // clear any pending/unrelated error before this diagnostic check
+        IPIrisHelper.blit(
             client.getMainRenderTarget(),
-            deferredBuffer.fb
+            deferredBuffer.fb,
+            true, true, true
         );
-        IPIrisHelper.copyColor(
-            client.getMainRenderTarget(),
-            deferredBuffer.fb
-        );
-//        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, client.getMainRenderTarget().frameBufferId);
-//        GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, deferredBuffer.fb.frameBufferId);
-//        GL30.glBlitFramebuffer(
-//            0, 0, deferredBuffer.fb.width, deferredBuffer.fb.height,
-//            0, 0, deferredBuffer.fb.width, deferredBuffer.fb.height,
-//            GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT,
-//            GL_NEAREST
-//        );
-        
+        int blitError = GL11.glGetError();
+        if (blitError != GL11.GL_NO_ERROR && !loggedBlitError) {
+            loggedBlitError = true;
+            CHelper.printChat(
+                "[ImmPtl Debug] Iris-compatibility-mode framebuffer blit failed with GL error " + blitError +
+                    ". Portal occlusion against shaders will be broken; please report this to the mod author."
+            );
+        }
+
         CHelper.checkGlError();
 
         Matrix4f effectiveModelView = portalLayer < passingModelViews.length ?

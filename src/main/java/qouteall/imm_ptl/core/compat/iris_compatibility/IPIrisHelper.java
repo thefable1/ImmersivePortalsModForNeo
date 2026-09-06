@@ -95,5 +95,33 @@ public class IPIrisHelper {
             1
         );
     }
-    
+
+    // glBlitFramebuffer-based alternative to copyColor()/newCopyDepthStencil() above.
+    // glCopyImageSubData requires the source and destination textures to have identical
+    // internal formats, which breaks whenever Iris reformats the main render target
+    // (e.g. for shader-required precision/stencil); blitting is far more tolerant of
+    // format differences between the two framebuffers.
+    public static void blit(
+        RenderTarget from, RenderTarget to,
+        boolean copyColor, boolean copyDepth, boolean copyStencil
+    ) {
+        int mask = 0;
+        if (copyColor) mask |= GL_COLOR_BUFFER_BIT;
+        if (copyDepth) mask |= GL_DEPTH_BUFFER_BIT;
+        if (copyStencil) mask |= GL_STENCIL_BUFFER_BIT;
+
+        from.unbindWrite();
+
+        GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, from.frameBufferId);
+        GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, to.frameBufferId);
+
+        GL30.glBlitFramebuffer(
+            0, 0, from.width, from.height,
+            0, 0, to.width, to.height,
+            mask, GL_NEAREST
+        );
+
+        from.unbindWrite();
+    }
+
 }
