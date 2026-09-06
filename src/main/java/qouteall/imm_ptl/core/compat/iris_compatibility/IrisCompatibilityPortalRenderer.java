@@ -41,8 +41,9 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     // per-layer version of the above, indexed the same way
     private Matrix4f[] passingModelViews = new Matrix4f[]{new Matrix4f()};
 
-    // one-shot diagnostic guard, see onBeforeHandRendering
+    // one-shot diagnostic guards, see onBeforeHandRendering
     private boolean loggedBlitError = false;
+    private boolean loggedFormatDiagnostics = false;
 
     public boolean isDebugMode;
     
@@ -246,29 +247,37 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
 
         // the main render target has a combined depth-stencil attachment (vanilla
         // creates it that way), but a freshly-created SecondaryFrameBuffer defaults to
-        // depth-only, which used to make the old glCopyImageSubData-based copy below
+        // depth-only, which used to make the glCopyImageSubData-based depth copy below
         // fail (GL_INVALID_OPERATION) whenever a shaderpack was active, leaving the
         // deferred buffer's depth stuck at its initial clear and portals rendering as
-        // if nothing ever occludes them. Keeping this so the formats stay aligned even
-        // though the blit below tolerates format differences better than a raw copy.
+        // if nothing ever occludes them.
         IPPortingLibCompat.setIsStencilEnabled(deferredBuffer.fb, true);
 
+        if (!loggedFormatDiagnostics) {
+            loggedFormatDiagnostics = true;
+            IPIrisHelper.logFormatDiagnostics(client.getMainRenderTarget(), deferredBuffer.fb);
+        }
+
         // save the main framebuffer (this recursion depth's freshly rendered world) to
-        // its deferred buffer. Uses a blit rather than IPIrisHelper.newCopyDepthStencil/
-        // copyColor (glCopyImageSubData) because that raw texture-to-texture copy
-        // requires identical internal formats between source and destination, which
-        // Iris can violate when a shaderpack is active.
-        GL11.glGetError(); // clear any pending/unrelated error before this diagnostic check
-        IPIrisHelper.blit(
+        // its deferred buffer. Color and depth/stencil are copied separately (not in one
+        // combined blit) because a combined blit aborts entirely -- including the color
+        // portion, which otherwise copies fine -- if the depth/stencil formats mismatch,
+        // which is exactly what's happening here (see the logged diagnostics above).
+        IPIrisHelper.copyColor(
             client.getMainRenderTarget(),
-            deferredBuffer.fb,
-            true, true, true
+            deferredBuffer.fb
         );
-        int blitError = GL11.glGetError();
-        if (blitError != GL11.GL_NO_ERROR && !loggedBlitError) {
+
+        GL11.glGetError(); // clear any pending/unrelated error before this diagnostic check
+        IPIrisHelper.newCopyDepthStencil(
+            client.getMainRenderTarget(),
+            deferredBuffer.fb
+        );
+        int depthCopyError = GL11.glGetError();
+        if (depthCopyError != GL11.GL_NO_ERROR && !loggedBlitError) {
             loggedBlitError = true;
             CHelper.printChat(
-                "[ImmPtl Debug] Iris-compatibility-mode framebuffer blit failed with GL error " + blitError +
+                "[ImmPtl Debug] Iris-compatibility-mode depth/stencil copy failed with GL error " + depthCopyError +
                     ". Portal occlusion against shaders will be broken; please report this to the mod author."
             );
         }

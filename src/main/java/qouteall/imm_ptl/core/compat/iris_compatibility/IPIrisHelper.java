@@ -6,6 +6,7 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL43C;
+import qouteall.imm_ptl.core.CHelper;
 
 import static org.lwjgl.opengl.GL11.*;
 
@@ -122,6 +123,31 @@ public class IPIrisHelper {
         );
 
         from.unbindWrite();
+    }
+
+    // Diagnostic-only: prints the actual GPU internal format of each texture involved
+    // in the main-target -> deferred-buffer copy, so a format mismatch (which shows up
+    // as GL_INVALID_OPERATION on both glCopyImageSubData and glBlitFramebuffer) can be
+    // identified directly instead of guessed at.
+    public static void logFormatDiagnostics(RenderTarget from, RenderTarget to) {
+        int mainDepthFormat = queryTextureInternalFormat(from.getDepthTextureId());
+        int mainColorFormat = queryTextureInternalFormat(from.getColorTextureId());
+        int secondaryDepthFormat = queryTextureInternalFormat(to.getDepthTextureId());
+        int secondaryColorFormat = queryTextureInternalFormat(to.getColorTextureId());
+
+        CHelper.printChat(String.format(
+            "[ImmPtl Debug] main target depth=0x%X color=0x%X | secondary buffer depth=0x%X color=0x%X",
+            mainDepthFormat, mainColorFormat, secondaryDepthFormat, secondaryColorFormat
+        ));
+    }
+
+    private static int queryTextureInternalFormat(int textureId) {
+        int previouslyBound = glGetInteger(GL_TEXTURE_BINDING_2D);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+        int[] out = new int[1];
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT, out);
+        glBindTexture(GL_TEXTURE_2D, previouslyBound);
+        return out[0];
     }
 
 }
