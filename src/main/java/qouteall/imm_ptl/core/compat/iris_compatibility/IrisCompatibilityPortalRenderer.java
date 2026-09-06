@@ -41,9 +41,9 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
     // per-layer version of the above, indexed the same way
     private Matrix4f[] passingModelViews = new Matrix4f[]{new Matrix4f()};
 
-    // one-shot diagnostic guards, see onBeforeHandRendering
-    private boolean loggedBlitError = false;
-    private boolean loggedFormatDiagnostics = false;
+    // one-shot guard: only warn once if the depth/stencil copy in onBeforeHandRendering
+    // ever fails again (e.g. a future Iris version/shaderpack picks a different format)
+    private boolean loggedDepthCopyError = false;
 
     public boolean isDebugMode;
     
@@ -247,42 +247,38 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
 
         // the main render target has a combined depth-stencil attachment (vanilla
         // creates it that way), but a freshly-created SecondaryFrameBuffer defaults to
-        // depth-only, which used to make the glCopyImageSubData-based depth copy below
-        // fail (GL_INVALID_OPERATION) whenever a shaderpack was active, leaving the
-        // deferred buffer's depth stuck at its initial clear and portals rendering as
-        // if nothing ever occludes them. Measured (via logFormatDiagnostics below) to be
-        // GL_DEPTH32F_STENCIL8 with Iris active here, not the GL_DEPTH24_STENCIL8 that
-        // IPPortingLibCompat.setIsStencilEnabled() would otherwise default to -- sync the
-        // precision flag from the real main-target format first so the two match.
+        // depth-only, which makes the glCopyImageSubData-based depth copy below fail
+        // (GL_INVALID_OPERATION) whenever a shaderpack is active, leaving the deferred
+        // buffer's depth stuck at its initial clear and portals rendering as if nothing
+        // ever occludes them. The exact depth-stencil precision matters too (confirmed
+        // via GL_TEXTURE_INTERNAL_FORMAT: Iris here uses GL_DEPTH32F_STENCIL8, not the
+        // GL_DEPTH24_STENCIL8 that IPPortingLibCompat.setIsStencilEnabled() would
+        // otherwise default to) -- sync the precision flag from the real main-target
+        // format first so the two match exactly.
         IPIrisHelper.syncSeparatedStencilFormatFromMainTarget(client.getMainRenderTarget());
         IPPortingLibCompat.setIsStencilEnabled(deferredBuffer.fb, true);
-
-        if (!loggedFormatDiagnostics) {
-            loggedFormatDiagnostics = true;
-            IPIrisHelper.logFormatDiagnostics(client.getMainRenderTarget(), deferredBuffer.fb);
-        }
 
         // save the main framebuffer (this recursion depth's freshly rendered world) to
         // its deferred buffer. Color and depth/stencil are copied separately (not in one
         // combined blit) because a combined blit aborts entirely -- including the color
-        // portion, which otherwise copies fine -- if the depth/stencil formats mismatch,
-        // which is exactly what's happening here (see the logged diagnostics above).
+        // portion, which otherwise copies fine -- if the depth/stencil formats mismatch.
         IPIrisHelper.copyColor(
             client.getMainRenderTarget(),
             deferredBuffer.fb
         );
 
-        GL11.glGetError(); // clear any pending/unrelated error before this diagnostic check
+        GL11.glGetError(); // clear any pending/unrelated error before this check
         IPIrisHelper.newCopyDepthStencil(
             client.getMainRenderTarget(),
             deferredBuffer.fb
         );
         int depthCopyError = GL11.glGetError();
-        if (depthCopyError != GL11.GL_NO_ERROR && !loggedBlitError) {
-            loggedBlitError = true;
+        if (depthCopyError != GL11.GL_NO_ERROR && !loggedDepthCopyError) {
+            loggedDepthCopyError = true;
+            IPIrisHelper.logFormatDiagnostics(client.getMainRenderTarget(), deferredBuffer.fb);
             CHelper.printChat(
-                "[ImmPtl Debug] Iris-compatibility-mode depth/stencil copy failed with GL error " + depthCopyError +
-                    ". Portal occlusion against shaders will be broken; please report this to the mod author."
+                "[ImmPtl] Portal rendering with shaders may be broken: depth/stencil copy failed with GL error " +
+                    depthCopyError + ". Please report this, including the debug line above, to the mod author."
             );
         }
 
