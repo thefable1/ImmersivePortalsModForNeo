@@ -7,11 +7,26 @@ import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL43C;
 import qouteall.imm_ptl.core.CHelper;
+import qouteall.imm_ptl.core.IPCGlobal;
 
 import static org.lwjgl.opengl.GL11.*;
 
 public class IPIrisHelper {
-    
+
+    // Whether to allocate our own depth-stencil textures (see IPCGlobal.useSeparatedStencilFormat)
+    // as GL_DEPTH32F_STENCIL8 (true) or GL_DEPTH24_STENCIL8 (false) is normally guessed from GPU
+    // vendor (see IrisPortalRenderer.prepareRendering), but that guess is only ever applied on
+    // that renderer. Measure the main render target's actual current depth format instead of
+    // guessing, so whichever renderer/format Iris happens to have picked (which can differ from
+    // the vendor-based guess, e.g. when a shaderpack forces a specific precision) is matched
+    // exactly -- this is what lets IPPortingLibCompat.setIsStencilEnabled() allocate a
+    // compatible format on the destination buffer for the depth/stencil copy that follows.
+    public static void syncSeparatedStencilFormatFromMainTarget(RenderTarget mainTarget) {
+        int mainDepthFormat = queryTextureInternalFormat(mainTarget.getDepthTextureId());
+        IPCGlobal.useSeparatedStencilFormat = (mainDepthFormat == GL30.GL_DEPTH32F_STENCIL8);
+    }
+
+
     public static void copyDepthStencil(
         RenderTarget from, RenderTarget to,
         boolean copyDepth, boolean copyStencil

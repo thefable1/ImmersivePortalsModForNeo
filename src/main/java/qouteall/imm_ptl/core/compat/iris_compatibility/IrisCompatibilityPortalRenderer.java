@@ -250,7 +250,11 @@ public class IrisCompatibilityPortalRenderer extends PortalRenderer {
         // depth-only, which used to make the glCopyImageSubData-based depth copy below
         // fail (GL_INVALID_OPERATION) whenever a shaderpack was active, leaving the
         // deferred buffer's depth stuck at its initial clear and portals rendering as
-        // if nothing ever occludes them.
+        // if nothing ever occludes them. Measured (via logFormatDiagnostics below) to be
+        // GL_DEPTH32F_STENCIL8 with Iris active here, not the GL_DEPTH24_STENCIL8 that
+        // IPPortingLibCompat.setIsStencilEnabled() would otherwise default to -- sync the
+        // precision flag from the real main-target format first so the two match.
+        IPIrisHelper.syncSeparatedStencilFormatFromMainTarget(client.getMainRenderTarget());
         IPPortingLibCompat.setIsStencilEnabled(deferredBuffer.fb, true);
 
         if (!loggedFormatDiagnostics) {
